@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FilialBestand.Api/FilialBestand.Api.csproj" />
+    <Project Path="src/FilialBestand.Domain/FilialBestand.Domain.csproj" />
+    <Project Path="src/FilialBestand.Infrastructure/FilialBestand.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FilialBestand.Tests/FilialBestand.Tests.csproj" />
+  </Folder>
+</Solution>
