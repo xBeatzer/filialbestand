@@ -11,41 +11,64 @@ namespace FilialBestand.Api.Controllers;
 
 public sealed class FilialenController(AppDbContext db, TimeProvider Zeit) : ODataController
 {
-    [EnableQuery(PageSize = 50)]
-    public IQueryable<Bestand> Get() => db.Bestaende.AsNoTracking();
+    [EnableQuery]
+    public IQueryable<Filiale> Get() => db.Filialen.AsNoTracking();
 
-    public async Task<IActionResult> Post([FromBody] Bestand neu, CancellationToken ct)
+    [EnableQuery]
+    public SingleResult<Filiale> Get([FromRoute] int key)
+        => SingleResult.Create(db.Filialen.AsNoTracking().Where(f => f.Id == key));
+
+    // FUNCTION  GET /odata/Filialen(1)/Default.Unterschreitungen()
+    [HttpGet]
+    [EnableQuery]
+    public IQueryable<Bestand> Unterschreitungen([FromRoute] int key)
+        => db.Bestaende.AsNoTracking()
+             .Where(b => b.FilialeId == key && b.Menge < b.Mindestbestand);
+
+    // ACTION  POST /odata/Filialen(1)/Default.NachbestellvorschlaegeErzeugen
+    [HttpPost]
+    public async Task<IActionResult> NachbestellvorschlaegeErzeugen([FromRoute] int key, CancellationToken ct)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState); // [RANGE]-Attribute greifen hier
+        if (!await db.Filialen.AnyAsync(f => f.Id == key, ct))
+            return NotFound();
 
-        if (neu.Zielbestand < neu.Mindestbestand)
-            return BadRequest("Zielbestand muss >= Mindestbestand sein.");
+        // Für diese Artikel gibt es schon einen offenen Vorschlag → nicht doppelt anlegen
+        var schonOffen = new HashSet<int>(await db.Nachbestellvorschlaege
+            .Where(v => v.FilialeId == key && v.Status == VorschlagStatus.Offen)
+            .Select(v => v.ArtikelId)
+            .ToListAsync(ct));
 
-        db.Bestaende.Add(neu);
-        
+        var kritisch = await db.Bestaende
+            .Where(b => b.FilialeId == key && b.Menge < b.Mindestbestand)
+            .ToListAsync(ct);
+
+        var neue = new List<Nachbestellvorschlag>();
+        foreach (var b in kritisch)
+        {
+            if (schonOffen.Contains(b.ArtikelId)) continue;
+            if (NachbestellRechner.BerechneMenge(b) is not int menge) continue;
+
+            neue.Add(new Nachbestellvorschlag
+            {
+                FilialeId = key,
+                ArtikelId = b.ArtikelId,
+                Menge = menge,
+                ErstelltAm = Zeit.GetUtcNow(),    // Npgsql verlangt UTC für timestamptz
+                Status = VorschlagStatus.Offen
+            });
+        }
+
+        db.Nachbestellvorschlaege.AddRange(neue);
         try
         {
             await db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException)
         {
-            return Conflict("Für diese Filiale und diesen Artikel existiert bereits ein Bestand.");
+            // Zwei gleichzeitige Aufrufe → der partielle Unique-Index aus Phase 1 schlägt zu
+            return Conflict("Vorschläge wurden parallel erzeugt, bitte erneut abrufen.");
         }
 
-        return Created(neu);
-    }
-
-    public async Task<IActionResult> Patch([FromRoute] int key, [FromBody] Delta<Bestand> delta, CancellationToken ct)
-    {
-        var bestand = await db.Bestaende.FindAsync([key], ct);
-        if (bestand is null) return NotFound();
-
-        delta.Patch(bestand); // übernimmt nur die Felder, die im Body standen
-
-        if (bestand.Menge < 0 || bestand.Zielbestand < bestand.Mindestbestand)
-            return BadRequest("Ungültige Werte");
-
-        await db.SaveChangesAsync(ct);
-        return Updated(bestand);
+        return Ok(neue);
     }
 }
