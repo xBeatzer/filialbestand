@@ -1,6 +1,36 @@
-@FilialBestand.Api_HostAddress = http://localhost:5259
+# Port: siehe Properties/launchSettings.json, Profil "http"
+# Wichtig: URLs dürfen KEINE Leerzeichen enthalten → als %20 schreiben
+@basis = http://localhost:5259/odata
 
-GET {{FilialBestand.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Metadaten ansehen
+GET {{basis}}/$metadata
 
-###
+### Filtern, sortieren, zählen
+GET {{basis}}/Artikel?$filter=startswith(Bezeichnung,'A')&$orderby=Bezeichnung&$top=10&$count=true
+
+### Nur bestimmte Felder
+GET {{basis}}/Artikel?$select=SapProduktNummer,Bezeichnung
+
+### Verschachteltes Expand mit Filter (erst ab Abschnitt 2.6, wenn der FilialenController existiert)
+GET {{basis}}/Filialen(1)?$expand=Bestaende($filter=Menge%20lt%20Mindestbestand;$expand=Artikel($select=Bezeichnung))
+
+### Function: kritische Bestände (ab 2.6)
+GET {{basis}}/Filialen(1)/Default.Unterschreitungen()
+
+### Action: Vorschläge erzeugen (ab 2.6; zweimal ausführen → zweites Mal leere Liste)
+POST {{basis}}/Filialen(1)/Default.NachbestellvorschlaegeErzeugen
+Content-Type: application/json
+
+{}
+
+### PATCH
+PATCH {{basis}}/Bestaende(1)
+Content-Type: application/json
+
+{ "Menge": 2 }
+
+### Absichtlich ungültig → 400
+PATCH {{basis}}/Bestaende(1)
+Content-Type: application/json
+
+{ "Menge": -5 }
