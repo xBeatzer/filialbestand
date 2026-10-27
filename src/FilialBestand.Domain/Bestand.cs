@@ -4,7 +4,7 @@ namespace FilialBestand.Domain;
 
 public class Bestand
 {
-    public int Id { get; set; }                 // eigener Schlüssel statt zusammengesetztem (siehe Kasten)
+    public int Id { get; set; }                 // eigener Schlüssel statt zusammengesetztem
     public int FilialeId { get; set; }
     public Filiale? Filiale { get; set; }
     public int ArtikelId { get; set; }
