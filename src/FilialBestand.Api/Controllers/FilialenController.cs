@@ -65,7 +65,7 @@ public sealed class FilialenController(AppDbContext db, TimeProvider Zeit) : ODa
         }
         catch (DbUpdateException)
         {
-            // Zwei gleichzeitige Aufrufe → der partielle Unique-Index aus Phase 1 schlägt zu
+            // Zwei gleichzeitige Aufrufe → der partielle Unique-Index schlägt zu
             return Conflict("Vorschläge wurden parallel erzeugt, bitte erneut abrufen.");
         }
 
